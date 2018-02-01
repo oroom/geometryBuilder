@@ -380,18 +380,78 @@ class GeometryBuildTools {
     }
     
     static func buildPoligon() -> SCNGeometry {
+        
+        // form
+//        let points: [SCNVector3] = [SCNVector3(x: 0, y: 0, z:0),
+//                                    SCNVector3(x: -11.8, y: 0.4, z:11.0),
+//                                    SCNVector3(x: -15.5, y: 2.1, z:42),
+//                                    SCNVector3(x: -16.5, y: 3, z:72.6),
+//                                    SCNVector3(x: -6.1, y: 3.4, z:85.1),
+//                                    SCNVector3(x: 26.2695923, y: 3.44000006,z : 88.1231613),
+//                                    SCNVector3(x : 52.3630257, y : 2.58999991, z : 96.565506),
+//                                    SCNVector3(x : 88.8584671, y : 1.30999994, z : 103.776833),
+//                                    SCNVector3(x : 125.000931, y : 0.25, z : 112.923729),
+//                                    SCNVector3(x : 149.859924, y : -0.170000002, z : 123.300522),
+//                                    SCNVector3(x : 172.779846, y : -1.45000005, z : 120.135063),
+//                                    SCNVector3(x : 178.773895, y : -2.29999995, z : 102.72168),
+//                                    SCNVector3(x : 180.184494, y : -2.50999999, z : 89.3541718),
+//                                    SCNVector3(x : 173.661301, y : -2.07999992, z : 77.2176743),
+//                                    SCNVector3(x : 87.9763489, y : -1.00999999, z : 43.0943565),
+//                                    SCNVector3(x: 0, y: 0, z:0),
+//                                    SCNVector3(x: -11.8, y: 0.4, z:11.0)]
+        
+        // rect
         let points: [SCNVector3] = [SCNVector3(x: 0, y: 0, z:0),
-                                    SCNVector3(x: 10, y: 0, z:0),
+                                    SCNVector3(x: 10, y: 3, z:0),
                                     SCNVector3(x: 10, y: 0, z:10),
-                                    SCNVector3(x: 0, y: 2, z:10),
-                                    SCNVector3(x: 0, y: 0, z:0),
-                                    SCNVector3(x: 10, y: 0, z:0),
-                                    SCNVector3(x: 10, y: 0, z:10)]
-        var centerPoints:[SCNVector3] = points
-        let geom = buildTube(centerPoints, radius: 1, segmentCount: 4, colour: vector_float4(1.0, 0.0, 0.0, 1.0), secondaryColour: vector_float4(1.0, 1.0, 1.0, 1.0))
+                                    SCNVector3(x: 0, y: 2, z:10)]
+        
+        let radius: Float = 1
+        var centerPoints:[SCNVector3] = preparedPoints(points: points, radius: 3*radius)
+        centerPoints = preparedPoints(points: centerPoints, radius: radius)
+        let geom = buildTube(centerPoints, radius: radius, segmentCount: 4, colour: vector_float4(1.0, 0.0, 0.0, 1.0), secondaryColour: vector_float4(1.0, 1.0, 1.0, 1.0))
         return geom
     }
     
+    static func preparedPoints(points: [SCNVector3], radius: Float) -> [SCNVector3] {
+        guard points.count > 2 else {
+            return points
+        }
+        var newPoints = [SCNVector3]()
+        var prevPoint = points.last!
+        for (i, point) in points.enumerated() {
+            let nextPoint: SCNVector3
+            let j = i + 1
+            if j < points.count {
+                nextPoint = points[j]
+            }
+            else {
+                nextPoint = points[0]
+            }
+            
+            let beforeL = (point - prevPoint).length()
+            let nextL = (nextPoint - point).length()
+            let shiftForward = beforeL > 2*radius ? radius : beforeL / 2
+            let shiftBackward = nextL > 2*radius ?  radius : nextL / 2
+            
+            let parallelBefore = (point - prevPoint).normalized() * shiftBackward
+            let parallelNext = (nextPoint - point).normalized() * shiftForward
+            if parallelBefore.normalized().dot(parallelNext.normalized()) > -0.95 {
+                let shift = (parallelNext - parallelBefore) / 4
+                newPoints.append(point - parallelBefore)
+                newPoints.append(point + shift)
+                newPoints.append(point + parallelNext)
+            }
+            else {
+                newPoints.append(point)
+            }
+            prevPoint = point
+        }
+        if newPoints.first!.distance(newPoints.last!) > radius / 10 {
+            newPoints.append(newPoints.first!)
+        }
+        return newPoints
+    }
     
     static func buildSpiral() -> SCNGeometry {
         
@@ -485,6 +545,8 @@ class GeometryBuildTools {
                           segmentCount: Int,
                           colour: vector_float4?,
                           secondaryColour: vector_float4?) -> SCNGeometry {
+        
+        let isJoined = points[0].distance(points.last!) < radius / 10
         var colour = colour
         if colour == nil {
             colour = vector_float4(0,0,0,1)
@@ -501,7 +563,8 @@ class GeometryBuildTools {
         var indexList: [CInt] = []
         var colourList:[vector_float4] = []
         
-        var lastPt:SCNVector3? = nil
+        let lastIndex = isJoined ? points.count - 2 : points.count - 1
+        var lastPt:SCNVector3? = points[lastIndex]
         var lastPtsOffset:[SCNVector3]? = nil
         var lastNormalsOffset:[SCNVector3]? = nil
         for (i,pt) in points.enumerated() {
@@ -518,8 +581,16 @@ class GeometryBuildTools {
                     nextAlong = (nextPt - pt)
                 }
                 else {
-                    let nextPt = points[0]
-                    nextAlong = (nextPt - pt)
+                    // if joined figure
+                    if isJoined {
+                        let nextPt = points[1]
+                        let prevPoint = points[0]
+                        nextAlong = (nextPt - prevPoint)
+                    }
+                    else {
+                        let nextPt = points[0]
+                        nextAlong = (nextPt - pt)
+                    }
                 }
                 
                 let parallelBefore = along.normalized()
