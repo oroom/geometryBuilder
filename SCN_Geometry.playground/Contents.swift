@@ -407,17 +407,33 @@ class GeometryBuildTools {
                                     SCNVector3(x: 0, y: 2, z:10)]
         
         let radius: Float = 1
-        var centerPoints:[SCNVector3] = preparedPoints(points: points, radius: 3*radius)
+        var centerPoints = points
+        centerPoints = preparedPoints(points: points, radius: 2 * radius)
         centerPoints = preparedPoints(points: centerPoints, radius: radius)
         let geom = buildTube(centerPoints, radius: radius, segmentCount: 4, colour: vector_float4(1.0, 0.0, 0.0, 1.0), secondaryColour: vector_float4(1.0, 1.0, 1.0, 1.0))
         return geom
     }
     
-    static func preparedPoints(points: [SCNVector3], radius: Float) -> [SCNVector3] {
-        guard points.count > 2 else {
-            return points
+    static func preparedPoints(points inputPoints: [SCNVector3], radius: Float) -> [SCNVector3] {
+        guard inputPoints.count > 2 else {
+            return inputPoints
         }
         var newPoints = [SCNVector3]()
+        var points = [SCNVector3]()
+        
+        //filter too close points
+        var lastDistance: Float = 0
+        for (i, point) in inputPoints.enumerated() {
+            let nextPoint = i + 2 < inputPoints.count ? inputPoints[i + 1] : points[0]
+            lastDistance += (point - nextPoint).length()
+            // ignore too close points
+//            if lastDistance > 0 {
+                points.append(point)
+//                lastDistance = 0
+//            }
+        }
+        
+        //append additional points
         var prevPoint = points.last!
         for (i, point) in points.enumerated() {
             let nextPoint: SCNVector3
@@ -431,8 +447,8 @@ class GeometryBuildTools {
             
             let beforeL = (point - prevPoint).length()
             let nextL = (nextPoint - point).length()
-            let shiftForward = beforeL > 2*radius ? radius : beforeL / 2
-            let shiftBackward = nextL > 2*radius ?  radius : nextL / 2
+            let shiftBackward = beforeL > 3*radius ? radius : beforeL / 3
+            let shiftForward = nextL > 3*radius ?  radius : nextL / 3
             
             let parallelBefore = (point - prevPoint).normalized() * shiftBackward
             let parallelNext = (nextPoint - point).normalized() * shiftForward
